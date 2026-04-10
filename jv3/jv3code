@@ -1,0 +1,110 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- 1. 数学定义实现 (对应作业要求) ---
+
+def dft(x):
+    """
+    一维 DFT 数学定义实现
+    X[k] = sum(x[n] * e^(-j*2*pi*k*n/N))
+    """
+    N = len(x)
+    n = np.arange(N)
+    k = n.reshape((N, 1))
+    # 使用欧拉公式 e^(-jx) = cos(x) - j*sin(x)
+    M = np.exp(-2j * np.pi * k * n / N)
+    return np.dot(M, x)
+
+def dct_ii(x):
+    """
+    一维 DCT-II 数学定义实现 (最常用类型)
+    X[k] = sum(x[n] * cos(pi*k*(2n+1)/(2N)))
+    这里省略了归一化系数，主要展示核函数形式
+    """
+    N = len(x)
+    n = np.arange(N)
+    k = n.reshape((N, 1))
+    # DCT 的核心是余弦函数
+    M = np.cos(np.pi * k * (2 * n + 1) / (2 * N))
+    return np.dot(M, x)
+
+# --- 2. 设置实验信号 ---
+# 创建一个简单的信号，特意让首尾数值不一致，以便观察边界效应
+N = 16
+n = np.arange(N)
+# 一个包含直流分量和简单变化的信号
+signal = np.array([4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1], dtype=float)
+
+# --- 3. 执行变换 ---
+dft_coeffs = dft(signal)
+dct_coeffs = dct_ii(signal)
+
+# --- 4. 回答作业问题的可视化展示 ---
+
+plt.figure(figsize=(14, 10))
+plt.rcParams['font.sans-serif'] = ['SimHei'] # 用来正常显示中文标签
+plt.rcParams['axes.unicode_minus'] = False
+
+# --- 图1：边界延拓对比 (作业核心：边界条件解释) ---
+plt.subplot(3, 1, 1)
+# 为了展示延拓，我们将信号重复拼接3次
+# DFT 延拓：直接复制粘贴 (周期性)
+ext_dft = np.concatenate([signal, signal, signal])
+
+# DCT 延拓：镜像翻转 (偶对称)
+# 原始 -> 翻转 -> 原始 -> 翻转
+ext_dct_part = np.concatenate([signal, signal[::-1]])
+ext_dct = np.concatenate([ext_dct_part, ext_dct_part, ext_dct_part[:len(signal)]]) # 截取适当长度
+
+plt.plot(ext_dft, label='DFT 隐含延拓 (周期延拓)', marker='o', linestyle='--', alpha=0.7)
+# 在拼接点画红线，显示跳变
+plt.axvline(x=N-0.5, color='r', linestyle=':', alpha=0.5)
+plt.axvline(x=2*N-0.5, color='r', linestyle=':', alpha=0.5)
+
+plt.plot(ext_dct, label='DCT 隐含延拓 (偶对称延拓)', marker='x', linewidth=2)
+plt.title('1. 边界条件对比：DFT vs DCT (红色虚线为拼接边界)')
+plt.xlabel('样本点索引 (延拓后)')
+plt.ylabel('幅度')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.text(N, max(ext_dct), ' DFT在此处有跳变\n(导致高频分量多)', color='red', verticalalignment='top')
+
+# --- 图2：基函数对比 (作业问题1 & 3) ---
+plt.subplot(3, 1, 2)
+k_val = 2  # 选择第2个频率分量作为例子
+# DFT 基函数是复数，这里画实部(余弦)和虚部(正弦)
+basis_dft_real = np.cos(2 * np.pi * k_val * n / N)
+basis_dft_imag = -np.sin(2 * np.pi * k_val * n / N)
+# DCT 基函数
+basis_dct = np.cos(np.pi * k_val * (2 * n + 1) / (2 * N))
+
+plt.plot(n, basis_dft_real, label=f'DFT 基函数实部 (k={k_val})', marker='o')
+plt.plot(n, basis_dft_imag, label=f'DFT 基函数虚部 (k={k_val})', marker='x')
+plt.plot(n, basis_dct, label=f'DCT 基函数 (k={k_val})', linewidth=3, alpha=0.7)
+plt.title(f'2. 基函数对比 (频率 k={k_val})')
+plt.xlabel('样本点 n')
+plt.ylabel('幅度')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+# --- 图3：系数形式 (作业问题2) ---
+plt.subplot(3, 1, 3)
+# 绘制系数幅度谱
+plt.stem(n, np.abs(dft_coeffs), label='DFT 系数幅度 (|X[k]|)', linefmt='C0-', markerfmt='C0o', basefmt=" ")
+plt.stem(n, np.abs(dct_coeffs), label='DCT 系数幅度', linefmt='C1-', markerfmt='C1x', basefmt=" ")
+plt.title('3. 变换系数对比 (左图为幅度)')
+plt.xlabel('频率索引 k')
+plt.ylabel('系数大小')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+# --- 5. 打印文本结果 (辅助理解) ---
+print("### 作业问题解答辅助 ###")
+print(f"1. 原始信号: {signal}")
+print(f"2. DFT 输出系数 (前5个): {dft_coeffs[:5]}")
+print("   -> 注意：DFT 输出是复数 (包含实部和虚部 j)")
+print(f"3. DCT 输出系数 (前5个): {dct_coeffs[:5]}")
+print("   -> 注意：DCT 输出是纯实数")

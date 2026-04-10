@@ -1,0 +1,125 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.fftpack import dct, idct
+
+# 设置中文字体，防止画图时中文乱码
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
+
+# ================= 辅助函数定义 =================
+
+def calculate_mse_psnr(img1, img2):
+    """计算 MSE 和 PSNR"""
+    mse = np.mean((img1 - img2) ** 2)
+    if mse == 0:
+        return 0, 100
+    max_pixel = 255.0
+    psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
+    return mse, psnr
+
+def plot_spectrum(img, title):
+    """计算并显示傅里叶频谱"""
+    f = np.fft.fft2(img)
+    fshift = np.fft.fftshift(f)
+    magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+    plt.imshow(magnitude_spectrum, cmap='gray')
+    plt.title(title)
+    plt.axis('off')
+
+def calculate_dct_energy_ratio(img):
+    """计算2D DCT及低频能量占比"""
+    img_float = img.astype(np.float32)
+    # 2D DCT
+    dct_img = dct(dct(img_float.T, norm='ortho').T, norm='ortho')
+
+    total_energy = np.sum(dct_img ** 2)
+
+    h, w = img.shape
+    h_block, w_block = h // 8, w // 8
+
+    low_freq_dct = np.zeros_like(dct_img)
+    low_freq_dct[:h_block, :w_block] = dct_img[:h_block, :w_block]
+
+    low_freq_energy = np.sum(low_freq_dct ** 2)
+    ratio = (low_freq_energy / total_energy) * 100
+    dct_log = 20 * np.log(np.abs(dct_img) + 1)
+
+    return dct_log, ratio
+
+# ================= 主程序 =================
+
+def main():
+    # 1. 图像读入
+    img_path = 'lean.png'
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+
+    if img is None:
+        print(f"错误：无法读取图像 {img_path}，请检查路径。")
+        return
+
+    # 2. 确保图像尺寸为偶数 (修复你被截断的代码部分)
+    h, w = img.shape
+    if h % 2 != 0:
+        img = img[:-1, :]
+        h -= 1
+    if w % 2 != 0:
+        img = img[:, :-1]
+        w -= 1
+
+    # 3. 下采样 (缩小为原来的一半)
+    # 使用 INTER_NEAREST 和 INTER_LINEAR 进行对比
+    h_small, w_small = h // 2, w // 2
+
+    # 注意：这里修正了变量名拼写错误 (nearest)
+    restored_nearest = cv2.resize(img, (w_small, h_small), interpolation=cv2.INTER_NEAREST)
+    restored_linear = cv2.resize(img, (w_small, h_small), interpolation=cv2.INTER_LINEAR)
+
+    # 4. 上采样 (恢复到原始尺寸，用于对比误差)
+    # 将缩小后的图放大回原来的 h, w
+    restored_nearest_resized = cv2.resize(restored_nearest, (w, h), interpolation=cv2.INTER_NEAREST)
+    restored_linear_resized = cv2.resize(restored_linear, (w, h), interpolation=cv2.INTER_LINEAR)
+
+    # 5. 误差分析 (MSE/PSNR)
+    mse_n, psnr_n = calculate_mse_psnr(img, restored_nearest_resized)
+    mse_l, psnr_l = calculate_mse_psnr(img, restored_linear_resized)
+
+    print(f"### 空间域误差分析 (对比原图) ###")
+    print(f"最近邻插值重建 -> MSE: {mse_n:.2f}, PSNR: {psnr_n:.2f} dB")
+    print(f"双线性插值重建 -> MSE: {mse_l:.2f}, PSNR: {psnr_l:.2f} dB")
+
+    # 6. 频域分析 (傅里叶变换)
+    plt.figure(figsize=(12, 8))
+
+    plt.subplot(2, 3, 1)
+    plt.imshow(img, cmap='gray')
+    plt.title('原始图像')
+    plt.axis('off')
+
+    plt.subplot(2, 3, 2)
+    plot_spectrum(img, '原始图像频谱')
+
+    plt.subplot(2, 3, 3)
+    # 显示最近邻重建图的频谱
+    plot_spectrum(restored_nearest_resized, '最近邻重建频谱')
+
+    plt.subplot(2, 3, 5)
+    # 显示双线性重建图的频谱
+    plot_spectrum(restored_linear_resized, '双线性重建频谱')
+
+    # 7. DCT 能量分析
+    _, ratio_orig = calculate_dct_energy_ratio(img)
+    _, ratio_nearest = calculate_dct_energy_ratio(restored_nearest_resized)
+    _, ratio_linear = calculate_dct_energy_ratio(restored_linear_resized)
+
+    print(f"\n### 频域能量分析 (低频占比) ###")
+    print(f"原始图像低频能量占比: {ratio_orig:.2f}%")
+    print(f"最近邻重建低频占比: {ratio_nearest:.2f}%")
+    print(f"双线性重建低频占比: {ratio_linear:.2f}%")
+
+    plt.tight_layout()
+    plt.show()
+
+# 程序入口
+if __name__ == "__main__":
+    main()
